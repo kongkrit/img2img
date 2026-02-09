@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="icon" href="favicon.svg" type="image/svg+xml">
     <title>HEIC / SVG to ICO / PNG Converter</title>
     <style>
         /* --- Simplified Dark Theme --- */
@@ -131,7 +132,8 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script> -->
+	<script src="./heic2any@0.0.4/dist/heic2any.min.js"></script>
 
     <script>
         // --- Config ---
@@ -247,7 +249,7 @@
                 const divNative = document.createElement('div');
                 divNative.className = 'control-row';
                 divNative.innerHTML = `
-                    <input type="radio" id="opt-native" name="scale-opt" value="native" checked>
+                    <input type="radio" id="opt-native" name="scale-opt" value="native">
                     <label for="opt-native">Native (${img.width} x ${img.height})</label>
                 `;
 
@@ -265,11 +267,11 @@
                 const divOverride = document.createElement('div');
                 divOverride.className = 'control-row';
                 divOverride.innerHTML = `
-                    <input type="radio" id="opt-override" name="scale-opt" value="override">
+                    <input type="radio" id="opt-override" name="scale-opt" value="override" checked>
                     <label for="opt-override">Override</label>
-                    <input type="number" id="override-w" placeholder="W" value="512" min="1" style="width:60px">
+                    <input type="number" id="override-w" placeholder="W" value="256" min="1" style="width:60px">
                     <span>x</span>
-                    <input type="number" id="override-h" placeholder="H" value="512" min="1" style="width:60px">
+                    <input type="number" id="override-h" placeholder="H" value="256" min="1" style="width:60px">
                 `;
 
                 form.appendChild(divNative);
@@ -277,14 +279,29 @@
                 form.appendChild(divOverride);
                 dom.info.appendChild(form);
 
-                // Auto-select logic
+                // --- Event Listeners for UI ---
                 const nativeRadio   = divNative.querySelector('#opt-native');
                 const scaleRadio    = divScale.querySelector('#opt-scale');
                 const scaleInput    = divScale.querySelector('#scale-val');
+                const scaleLabel    = divScale.querySelector('#ratio-scale');
                 const overrideRadio = divOverride.querySelector('#opt-override');
                 const overrideW     = divOverride.querySelector('#override-w');
                 const overrideH     = divOverride.querySelector('#override-h');
 
+                // Dynamic update function for Scale
+                const updateScaleLabel = () => {
+                    const factor = parseFloat(scaleInput.value) || 0;
+                    const nw = Math.round(img.width * factor);
+                    const nh = Math.round(img.height * factor);
+                    scaleLabel.textContent = `x (${nw} x ${nh})`;
+                };
+
+                // Init label
+                updateScaleLabel();
+
+                // Events
+                scaleInput.addEventListener('input', updateScaleLabel);
+                
                 scaleInput.addEventListener('focus', () => scaleRadio.checked = true);
                 overrideW.addEventListener('focus',  () => overrideRadio.checked = true);
                 overrideH.addEventListener('focus',  () => overrideRadio.checked = true);
