@@ -61,6 +61,22 @@
             margin-bottom: 1.5rem;
         }
 
+        /* Info & Choice Section */
+        #choice-and-info {
+            width: 100%;
+            background: #252525;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            border: 1px solid #333;
+        }
+        .info-row { margin-bottom: 0.5rem; color: #aaa; font-size: 0.9rem; }
+        .control-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
+        input[type="number"] {
+            background: #333; border: 1px solid #555; color: #fff;
+            padding: 4px; width: 60px; border-radius: 3px;
+        }
+
         /* Controls */
         .button-group {
             display: flex;
@@ -105,6 +121,10 @@
 
     <div id="preview-section" class="hidden">
         <canvas id="preview-canvas"></canvas>
+        
+        <div id="choice-and-info">
+            </div>
+
         <div class="button-group">
             <button id="btn-dl-png" class="btn-png">Download .PNG</button>
             <button id="btn-dl-ico" class="btn-ico">Download .ICO</button>
@@ -116,7 +136,6 @@
     <script>
         // --- Config ---
         const config = {
-            icoSize: 256,         // Standard ICO size
             heicQuality: 1.0,     // 1.0 = lossless
             pngType: "image/png"
         };
@@ -132,6 +151,7 @@
             canvas: byId("preview-canvas"),
             status: byId("status-msg"),
             error: byId("error-msg"),
+            info: byId("choice-and-info"),
             btnPng: byId("btn-dl-png"),
             btnIco: byId("btn-dl-ico")
         };
@@ -139,25 +159,33 @@
         // --- State ---
         const state = {
             currentImg: null,
-            baseFileName: "converted"
+            baseFileName: "converted",
+            fileType: null // 'svg' or 'heic'
         };
 
         // --- Core Logic ---
 
-        // 1. Handle File Selection
         async function processFile(file) {
             resetUI();
             
             const lowerName = file.name.toLowerCase();
-            state.baseFileName = file.name.replace(/\.[^/.]+$/, ""); // strip extension
+            state.baseFileName = file.name.replace(/\.[^/.]+$/, "");
+            
+            // Determine type
+            if (lowerName.endsWith('.svg')) state.fileType = 'svg';
+            else if (lowerName.endsWith('.heic')) state.fileType = 'heic';
+            else {
+                dom.error.textContent = "Unsupported file format.";
+                return;
+            }
 
             try {
                 dom.status.textContent = "Processing...";
                 
                 let blob = file;
 
-                // Conversion path 1: HEIC -> Blob (PNG)
-                if (lowerName.endsWith('.heic')) {
+                // HEIC Conversion
+                if (state.fileType === 'heic') {
                     const result = await heic2any({
                         blob: file,
                         toType: config.pngType,
@@ -165,22 +193,14 @@
                     });
                     blob = Array.isArray(result) ? result[0] : result;
                 } 
-                // Conversion path 2: SVG -> Validate type
-                else if (lowerName.endsWith('.svg')) {
-                    if (file.type !== 'image/svg+xml') {
-                        throw new Error("Invalid SVG mime type.");
-                    }
-                } else {
-                    throw new Error("Unsupported file format. Please use HEIC or SVG.");
-                }
 
-                // Load Blob into Image Object
                 const url = URL.createObjectURL(blob);
                 const img = new Image();
                 
                 img.onload = () => {
                     state.currentImg = img;
                     renderPreview(img);
+                    updateInfoUI(img);
                     dom.status.textContent = "";
                     dom.previewSection.classList.remove('hidden');
                     URL.revokeObjectURL(url);
@@ -199,19 +219,89 @@
             }
         }
 
-        // 2. Render to Main Canvas
+        // Render purely for visual preview (does not affect output)
         function renderPreview(img) {
             const ctx = dom.canvas.getContext('2d');
-            
-            // Set canvas size to match image (capped at max view width via CSS)
             dom.canvas.width = img.width;
             dom.canvas.height = img.height;
-            
             ctx.clearRect(0, 0, dom.canvas.width, dom.canvas.height);
             ctx.drawImage(img, 0, 0);
         }
 
-        // 3. Download Helpers
+        // Build the choice/info UI based on file type
+        function updateInfoUI(img) {
+            dom.info.innerHTML = ''; // Clear previous
+
+            // 1. Info Row
+            const infoRow = document.createElement('div');
+            infoRow.className = 'info-row';
+            infoRow.textContent = `Original Size: ${img.width} x ${img.height} px`;
+            dom.info.appendChild(infoRow);
+
+            // 2. Options (Only for SVG)
+            if (state.fileType === 'svg') {
+                const form = document.createElement('form');
+                form.onsubmit = (e) => e.preventDefault();
+                
+                // Option 1: Native
+                const divNative = document.createElement('div');
+                divNative.className = 'control-row';
+                divNative.innerHTML = `
+                    <input type="radio" id="opt-native" name="scale-opt" value="native" checked>
+                    <label for="opt-native">Native (${img.width} x ${img.height})</label>
+                `;
+
+                // Option 2: Scale
+                const divScale = document.createElement('div');
+                divScale.className = 'control-row';
+                divScale.innerHTML = `
+                    <input type="radio" id="opt-scale" name="scale-opt" value="scale">
+                    <label for="opt-scale">Scale by</label>
+                    <input type="number" id="scale-val" value="2" min="1" step="0.1" style="width:50px">
+                    <span>x</span>
+                `;
+
+                form.appendChild(divNative);
+                form.appendChild(divScale);
+                dom.info.appendChild(form);
+
+                // Auto-select radio when typing in number
+                const scaleInput = divScale.querySelector('#scale-val');
+                const nativeRadio = divNative.querySelector('#opt-native');
+                const scaleRadio = divScale.querySelector('#opt-scale');
+
+                scaleInput.addEventListener('focus', () => scaleRadio.checked = true);
+            }
+        }
+
+        // Calculate final output dimensions based on User Choice
+        function getOutputDimensions() {
+            const img = state.currentImg;
+            if (!img) return { w: 0, h: 0 };
+
+            if (state.fileType === 'svg') {
+                const scaleRadio = dom.info.querySelector('#opt-scale');
+                if (scaleRadio && scaleRadio.checked) {
+                    const factor = parseFloat(dom.info.querySelector('#scale-val').value) || 1;
+                    return { w: img.width * factor, h: img.height * factor };
+                }
+            }
+            // Default (Native or HEIC)
+            return { w: img.width, h: img.height };
+        }
+
+        // Generate the final canvas for download
+        function getOutputCanvas() {
+            const dims = getOutputDimensions();
+            const canvas = document.createElement('canvas');
+            canvas.width = dims.w;
+            canvas.height = dims.h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(state.currentImg, 0, 0, dims.w, dims.h);
+            return canvas;
+        }
+
+        // Download logic
         function downloadBlob(blob, ext) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -223,32 +313,32 @@
             URL.revokeObjectURL(url);
         }
 
-        // 4. ICO Binary Generator
-        async function createIcoBlob(pngBlob) {
+        // ICO Generator
+        async function createIcoBlob(pngBlob, w, h) {
             const pngBuffer = await pngBlob.arrayBuffer();
             const pngSize = pngBuffer.byteLength;
-            const offset = 22; // Header (6) + DirEntry (16)
+            const offset = 22; 
             
             const buffer = new ArrayBuffer(offset + pngSize);
             const view = new DataView(buffer);
             
-            // ICO Header
             view.setUint16(0, 0, true); 
-            view.setUint16(2, 1, true); // Type 1 = ICO
-            view.setUint16(4, 1, true); // Count 1 image
+            view.setUint16(2, 1, true); 
+            view.setUint16(4, 1, true); 
 
-            // Directory Entry
-            const s = config.icoSize >= 256 ? 0 : config.icoSize;
-            view.setUint8(6, s);   // W
-            view.setUint8(7, s);   // H
-            view.setUint8(8, 0);   // Colors
-            view.setUint8(9, 0);   // Reserved
-            view.setUint16(10, 1, true);  // Planes
-            view.setUint16(12, 32, true); // BPP
+            // Width/Height > 255 should be 0 in ICO header
+            const bw = w >= 256 ? 0 : w;
+            const bh = h >= 256 ? 0 : h;
+
+            view.setUint8(6, bw);
+            view.setUint8(7, bh);
+            view.setUint8(8, 0);
+            view.setUint8(9, 0);
+            view.setUint16(10, 1, true);
+            view.setUint16(12, 32, true);
             view.setUint32(14, pngSize, true); 
             view.setUint32(18, offset, true); 
 
-            // Payload
             new Uint8Array(buffer).set(new Uint8Array(pngBuffer), offset);
             return new Blob([buffer], { type: 'image/x-icon' });
         }
@@ -257,12 +347,13 @@
             dom.error.textContent = "";
             dom.status.textContent = "";
             dom.previewSection.classList.add('hidden');
+            dom.info.innerHTML = "";
             state.currentImg = null;
+            state.fileType = null;
         }
 
         // --- Event Listeners ---
 
-        // Drop Zone Interaction
         dom.dropZone.onclick = () => dom.fileInput.click();
         
         dom.dropZone.ondragover = (e) => {
@@ -282,25 +373,20 @@
             if (e.target.files[0]) processFile(e.target.files[0]);
         };
 
-        // Button Actions
         dom.btnPng.onclick = () => {
             if (!state.currentImg) return;
-            dom.canvas.toBlob(blob => downloadBlob(blob, 'png'), 'image/png');
+            const canvas = getOutputCanvas();
+            canvas.toBlob(blob => downloadBlob(blob, 'png'), 'image/png');
         };
 
         dom.btnIco.onclick = () => {
             if (!state.currentImg) return;
+            const canvas = getOutputCanvas();
             
-            // Create temporary canvas for resizing to ICO standard (256x256)
-            const icoCanvas = document.createElement('canvas');
-            icoCanvas.width = config.icoSize;
-            icoCanvas.height = config.icoSize;
-            const ctx = icoCanvas.getContext('2d');
-            ctx.drawImage(state.currentImg, 0, 0, config.icoSize, config.icoSize);
-
-            icoCanvas.toBlob(async (blob) => {
+            // Note: We use the *selected size* for the ICO internal image
+            canvas.toBlob(async (blob) => {
                 if (blob) {
-                    const icoBlob = await createIcoBlob(blob);
+                    const icoBlob = await createIcoBlob(blob, canvas.width, canvas.height);
                     downloadBlob(icoBlob, 'ico');
                 }
             }, 'image/png');
