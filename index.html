@@ -251,26 +251,43 @@
                     <label for="opt-native">Native (${img.width} x ${img.height})</label>
                 `;
 
-                // Option 2: Scale
+                // Option 2: Scale Factor
                 const divScale = document.createElement('div');
                 divScale.className = 'control-row';
                 divScale.innerHTML = `
                     <input type="radio" id="opt-scale" name="scale-opt" value="scale">
                     <label for="opt-scale">Scale by</label>
                     <input type="number" id="scale-val" value="2" min="1" step="0.1" style="width:50px">
+                    <span id="ratio-scale">x</span>
+                `;
+
+                // Option 3: Override
+                const divOverride = document.createElement('div');
+                divOverride.className = 'control-row';
+                divOverride.innerHTML = `
+                    <input type="radio" id="opt-override" name="scale-opt" value="override">
+                    <label for="opt-override">Override</label>
+                    <input type="number" id="override-w" placeholder="W" value="512" min="1" style="width:60px">
                     <span>x</span>
+                    <input type="number" id="override-h" placeholder="H" value="512" min="1" style="width:60px">
                 `;
 
                 form.appendChild(divNative);
                 form.appendChild(divScale);
+                form.appendChild(divOverride);
                 dom.info.appendChild(form);
 
-                // Auto-select radio when typing in number
-                const scaleInput = divScale.querySelector('#scale-val');
-                const nativeRadio = divNative.querySelector('#opt-native');
-                const scaleRadio = divScale.querySelector('#opt-scale');
+                // Auto-select logic
+                const nativeRadio   = divNative.querySelector('#opt-native');
+                const scaleRadio    = divScale.querySelector('#opt-scale');
+                const scaleInput    = divScale.querySelector('#scale-val');
+                const overrideRadio = divOverride.querySelector('#opt-override');
+                const overrideW     = divOverride.querySelector('#override-w');
+                const overrideH     = divOverride.querySelector('#override-h');
 
                 scaleInput.addEventListener('focus', () => scaleRadio.checked = true);
+                overrideW.addEventListener('focus',  () => overrideRadio.checked = true);
+                overrideH.addEventListener('focus',  () => overrideRadio.checked = true);
             }
         }
 
@@ -281,9 +298,19 @@
 
             if (state.fileType === 'svg') {
                 const scaleRadio = dom.info.querySelector('#opt-scale');
+                const overrideRadio = dom.info.querySelector('#opt-override');
+
+                // Case: Scale Factor
                 if (scaleRadio && scaleRadio.checked) {
                     const factor = parseFloat(dom.info.querySelector('#scale-val').value) || 1;
                     return { w: img.width * factor, h: img.height * factor };
+                }
+
+                // Case: Override Dimensions
+                if (overrideRadio && overrideRadio.checked) {
+                    const w = parseInt(dom.info.querySelector('#override-w').value) || img.width;
+                    const h = parseInt(dom.info.querySelector('#override-h').value) || img.height;
+                    return { w: w, h: h };
                 }
             }
             // Default (Native or HEIC)
